@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light mode (default) ── */
+  :root {
+    --background: 0 0% 98%;
+    --surface: 0 0% 100%;
+    --surface-dim: 0 0% 95%;
+    --surface-bright: 0 0% 100%;
+    --surface-container-lowest: 0 0% 94%;
+    --surface-container-low: 0 0% 96%;
+    --surface-container: 0 0% 93%;
+    --surface-container-high: 0 0% 90%;
+    --surface-container-highest: 0 0% 87%;
+    --on-surface: 240 10% 10%;
+    --on-surface-variant: 240 6% 35%;
+    --outline: 240 5% 55%;
+    --outline-variant: 240 4% 78%;
+    --primary: 233 80% 45%;
+    --primary-container: 233 80% 55%;
+    --on-primary: 0 0% 100%;
+    --on-primary-container: 0 0% 100%;
+    --primary-fixed: 233 80% 90%;
+    --primary-fixed-dim: 233 80% 45%;
+    --secondary: 280 60% 40%;
+    --secondary-container: 280 60% 50%;
+    --on-secondary: 0 0% 100%;
+    --on-secondary-container: 0 0% 100%;
+    --tertiary: 243 60% 45%;
+    --tertiary-container: 243 60% 55%;
+    --on-tertiary: 0 0% 100%;
+    --on-tertiary-container: 0 0% 100%;
+    --error: 5 80% 40%;
+    --error-container: 5 80% 90%;
+    --on-error: 0 0% 100%;
+    --on-error-container: 5 80% 20%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Dark mode ── */
+  .dark {
+    --background: 240 6% 6%;
+    --surface: 240 5% 8%;
+    --surface-dim: 240 5% 8%;
+    --surface-bright: 240 4% 24%;
+    --surface-container-lowest: 240 6% 4%;
+    --surface-container-low: 240 5% 11%;
+    --surface-container: 240 4% 13%;
+    --surface-container-high: 240 4% 17%;
+    --surface-container-highest: 240 4% 21%;
+    --on-surface: 330 4% 90%;
+    --on-surface-variant: 243 14% 80%;
+    --outline: 243 10% 57%;
+    --outline-variant: 243 10% 30%;
+    --primary: 236 100% 87%;
+    --primary-container: 233 75% 58%;
+    --on-primary: 233 75% 30%;
+    --on-primary-container: 233 75% 20%;
+    --primary-fixed: 236 100% 94%;
+    --primary-fixed-dim: 236 100% 87%;
+    --secondary: 280 100% 87%;
+    --secondary-container: 280 100% 43%;
+    --on-secondary: 280 100% 28%;
+    --on-secondary-container: 280 100% 85%;
+    --tertiary: 243 100% 87%;
+    --tertiary-container: 243 100% 58%;
+    --on-tertiary: 243 100% 20%;
+    --on-tertiary-container: 243 100% 18%;
+    --error: 5 100% 84%;
+    --error-container: 5 100% 30%;
+    --on-error: 5 100% 26%;
+    --on-error-container: 5 100% 90%;
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-outline-variant;
+  }
+  body {
+    @apply bg-background text-on-surface;
+  }
+
+  /* Autofill — adapts to theme via CSS variable */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px hsl(var(--surface-container-lowest)) inset !important;
+    -webkit-text-fill-color: hsl(var(--on-surface)) !important;
+    caret-color: hsl(var(--on-surface));
+    transition: background-color 9999s ease-in-out 0s;
+  }
+}
+
+@layer utilities {
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+}
