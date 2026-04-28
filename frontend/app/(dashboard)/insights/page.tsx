@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import ChatPanel from '@/components/ChatPanel'
 import { sendChat } from '@/lib/api'
 
@@ -108,7 +109,7 @@ export default function InsightsPage() {
                   </div>
                 ) : (
                   <div className="text-xs leading-relaxed prose prose-xs max-w-none prose-p:text-on-surface-variant prose-p:my-1 prose-strong:text-on-surface prose-li:text-on-surface-variant prose-li:my-0 prose-ul:mt-1 prose-ul:pl-4 prose-headings:text-on-surface prose-headings:text-xs prose-a:text-primary [&_pre]:!bg-surface-container-high [&_pre]:!text-on-surface-variant [&_pre]:rounded [&_pre]:p-2 [&_pre]:text-[0.65rem] [&_pre]:border [&_pre]:border-outline-variant/20 [&_code]:!bg-transparent [&_code]:text-primary [&_code]:text-[0.65rem] [&_table]:w-full [&_table]:text-[0.65rem] [&_th]:pb-1 [&_th]:text-on-surface-variant [&_td]:py-0.5 [&_td]:text-on-surface-variant">
-                    <ReactMarkdown>{card.reply ?? ''}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{card.reply ?? ''}</ReactMarkdown>
                   </div>
                 )}
               </div>

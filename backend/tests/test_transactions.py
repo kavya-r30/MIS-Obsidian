@@ -23,3 +23,32 @@ def test_get_transaction(client, admin_token, db, admin_user):
 def test_get_transaction_not_found(client, admin_token):
     res = client.get("/api/transactions/9999", headers={"Authorization": f"Bearer {admin_token}"})
     assert res.status_code == 404
+
+
+def test_create_transaction_with_expense_category(client, admin_token):
+    res = client.post("/api/transactions/",
+        json={
+            "vendor_name": "Acme", "amount": 100, "transaction_date": "2026-05-15",
+            "department": "Engineering", "cost_center": "CC001",
+            "expense_category": "travel",
+        },
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert res.status_code == 200
+    assert res.json()["expense_category"] == "travel"
+
+
+def test_filter_transactions_by_category(client, admin_token):
+    h = {"Authorization": f"Bearer {admin_token}"}
+    client.post("/api/transactions/",
+        json={"vendor_name": "A", "amount": 1, "transaction_date": "2026-05-15",
+              "department": "Engineering", "cost_center": "CC001", "expense_category": "travel"},
+        headers=h)
+    client.post("/api/transactions/",
+        json={"vendor_name": "B", "amount": 2, "transaction_date": "2026-05-15",
+              "department": "Engineering", "cost_center": "CC001", "expense_category": "meals"},
+        headers=h)
+    res = client.get("/api/transactions/?expense_category=travel", headers=h)
+    items = res.json()["items"]
+    assert len(items) >= 1
+    assert all(it["expense_category"] == "travel" for it in items)

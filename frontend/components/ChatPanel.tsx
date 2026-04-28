@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Send } from 'lucide-react'
 import { sendChat } from '@/lib/api'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface Message {
   role: 'user' | 'ai'
@@ -101,10 +102,14 @@ export default function ChatPanel() {
                   className={
                     msg.role === 'user'
                       ? 'bg-surface-container-high rounded-2xl rounded-tr-sm px-4 py-3 max-w-[70%] font-body text-sm text-on-surface'
-                      : 'bg-surface-container-low rounded-2xl rounded-tl-sm px-4 py-3 max-w-[70%] font-body text-sm text-on-surface prose prose-sm prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-li:text-on-surface prose-code:text-primary prose-pre:bg-surface-container prose-a:text-primary'
+                      : 'bg-surface-container-low rounded-2xl rounded-tl-sm px-4 py-3 max-w-[70%] font-body text-sm text-on-surface prose prose-sm max-w-none prose-headings:text-on-surface prose-p:text-on-surface prose-strong:text-on-surface prose-li:text-on-surface prose-code:text-primary prose-pre:bg-surface-container prose-a:text-primary [&_pre]:!bg-surface-container-high [&_code]:!bg-transparent [&_table]:block [&_table]:overflow-x-auto [&_table]:w-full [&_th]:text-on-surface [&_td]:text-on-surface-variant [&_th]:border-b [&_th]:border-outline-variant/30 [&_td]:border-b [&_td]:border-outline-variant/10'
                   }
                 >
-                  {msg.role === 'ai' ? <ReactMarkdown>{msg.text}</ReactMarkdown> : msg.text}
+                  {msg.role === 'ai' ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                  ) : (
+                    msg.text
+                  )}
                 </div>
               </div>
             ))}

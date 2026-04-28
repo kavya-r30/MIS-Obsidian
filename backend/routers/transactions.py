@@ -22,6 +22,7 @@ class ManualTransactionCreate(BaseModel):
     payment_method:   Optional[str] = None
     invoice_number:   Optional[str] = None
     approval_ref:     Optional[str] = None
+    expense_category: Optional[str] = None
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -46,15 +47,17 @@ def _tx_dict(tx: Transaction) -> dict:
         "is_duplicate":       tx.is_duplicate,
         "revalidation_count": tx.revalidation_count,
         "upload_date":        str(tx.upload_date),
+        "expense_category":   tx.expense_category,
     }
 
 
 @router.get("/")
 def list_transactions(
-    status:     Optional[str] = None,
-    department: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date:   Optional[str] = None,
+    status:           Optional[str] = None,
+    department:       Optional[str] = None,
+    start_date:       Optional[str] = None,
+    end_date:         Optional[str] = None,
+    expense_category: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
@@ -69,6 +72,8 @@ def list_transactions(
         q = q.filter(Transaction.transaction_date >= start_date)
     if end_date:
         q = q.filter(Transaction.transaction_date <= end_date)
+    if expense_category:
+        q = q.filter(Transaction.expense_category == expense_category)
     total = q.count()
     items = q.order_by(Transaction.upload_date.desc()).offset(skip).limit(limit).all()
     return {"total": total, "items": [_tx_dict(t) for t in items]}
@@ -95,6 +100,7 @@ def create_transaction_manual(
         payment_method=body.payment_method.strip() if body.payment_method else None,
         invoice_number=body.invoice_number.strip() if body.invoice_number else None,
         approval_ref=body.approval_ref.strip() if body.approval_ref else None,
+        expense_category=body.expense_category,
         uploaded_by=current_user.id,
     )
     db.add(tx)

@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.db.database import create_tables
 from backend.core.config import settings
-from backend.routers import auth, users, rules, master_data, ingest, validate, transactions, exceptions, analytics, export, chat, audit_log
+from backend.routers import auth, users, rules, master_data, ingest, validate, transactions, exceptions, analytics, export, chat, audit_log, budgets
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.include_router(analytics.router, prefix="/api")
 app.include_router(export.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(audit_log.router, prefix="/api")
+app.include_router(budgets.router, prefix="/api")
 
 
 @app.get("/api/health")

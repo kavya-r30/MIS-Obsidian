@@ -1,11 +1,13 @@
 # backend/agents/validator_agent.py
 import json
 from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..db.models import (
-    Transaction, ValidationLog, Rule, MasterData,
+    Transaction, ValidationLog, Rule, MasterData, Budget,
     ValidationSeverity, TransactionStatus, RuleType,
 )
+from ..core.fiscal import fiscal_period, fy_start_iso, fy_end_iso
 
 DEFAULT_REQUIRED_FIELDS = ["vendor_name", "amount", "transaction_date", "department", "cost_center"]
 DEFAULT_CASH_METHODS = ["cash"]
@@ -173,14 +175,43 @@ def _check_rule(rule: Rule, tx: Transaction, db: Session) -> tuple[bool, str]:
         return True, f"Transaction amount is within the review threshold of ₹{threshold:,.2f}."
 
     if rule.rule_type == RuleType.department_budget:
-        threshold = rule.threshold or 50000.0
-        if tx.amount and tx.amount > threshold:
-            dept = tx.department or "Unknown"
+        if not tx.department or not tx.transaction_date or not tx.amount:
+            return True, "Budget check skipped — missing department, date, or amount."
+        try:
+            tx_date = datetime.strptime(tx.transaction_date, "%Y-%m-%d").date()
+        except ValueError:
+            return True, "Budget check skipped — invalid transaction_date format."
+
+        fy, q = fiscal_period(tx_date)
+        budget = db.query(Budget).filter_by(
+            department=tx.department, fiscal_year=fy, quarter=q,
+        ).first()
+        if not budget:
+            return True, f"No budget set for {tx.department} {fy} {q} — check skipped."
+
+        start = fy_start_iso(fy, q)
+        end = fy_end_iso(fy, q)
+        spent = db.query(func.coalesce(func.sum(Transaction.amount), 0.0)).filter(
+            Transaction.department == tx.department,
+            Transaction.id != tx.id,
+            Transaction.transaction_date >= start,
+            Transaction.transaction_date <= end,
+            Transaction.status.in_([
+                TransactionStatus.validated,
+                TransactionStatus.flagged,
+                TransactionStatus.approved,
+            ]),
+        ).scalar() or 0.0
+
+        if spent + tx.amount > budget.amount:
+            over = spent + tx.amount - budget.amount
             return False, (
-                f"Transaction amount ₹{tx.amount:,.2f} exceeds the department budget limit of ₹{threshold:,.2f} "
-                f"for department '{dept}'. Obtain department head approval before processing."
+                f"Department '{tx.department}' would exceed {fy} {q} budget of "
+                f"₹{budget.amount:,.0f} by ₹{over:,.0f}. Already spent ₹{spent:,.0f}, "
+                f"this transaction adds ₹{tx.amount:,.0f}."
             )
-        return True, f"Transaction amount is within the department budget limit of ₹{threshold:,.2f}."
+        remaining = budget.amount - spent - tx.amount
+        return True, f"Within {fy} {q} budget — ₹{remaining:,.0f} remaining."
 
     if rule.rule_type == RuleType.tax_rate_check:
         expected_rate = rule.threshold or 0.18

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   getRules,
   createRule,
@@ -9,10 +9,15 @@ import {
   getMasterData,
   createMasterData,
   deactivateMasterData,
+  getBudgets,
+  createBudget,
+  updateBudget,
+  deleteBudget,
   Rule,
   MasterDataEntry,
+  Budget,
 } from '@/lib/api'
-import { isAdmin } from '@/lib/auth'
+import { isAdmin, isManager } from '@/lib/auth'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -641,7 +646,7 @@ function RulesTab() {
 
 // ─── ReferenceDataTab ─────────────────────────────────────────────────────────
 
-const MASTER_DATA_TYPES = ['vendor', 'cost_center', 'department'] as const
+const MASTER_DATA_TYPES = ['vendor', 'cost_center', 'department', 'expense_category'] as const
 type MasterDataType = typeof MASTER_DATA_TYPES[number]
 
 const TYPE_LABELS: Record<MasterDataType | 'all', string> = {
@@ -649,6 +654,7 @@ const TYPE_LABELS: Record<MasterDataType | 'all', string> = {
   vendor: 'Vendor',
   cost_center: 'Cost Center',
   department: 'Department',
+  expense_category: 'Expense Category',
 }
 
 interface NewEntryForm {
@@ -840,6 +846,7 @@ function ReferenceDataTab() {
                   <SelectItem value="vendor">Vendor</SelectItem>
                   <SelectItem value="cost_center">Cost Center</SelectItem>
                   <SelectItem value="department">Department</SelectItem>
+                  <SelectItem value="expense_category">Expense Category</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -918,6 +925,294 @@ function ReferenceDataTab() {
   )
 }
 
+// ─── BudgetsTab ───────────────────────────────────────────────────────────────
+
+const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'] as const
+
+function currentFY(): string {
+  const now = new Date()
+  const year = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  return `${year}-${String((year + 1) % 100).padStart(2, '0')}`
+}
+
+function nextFY(): string {
+  const cur = parseInt(currentFY().split('-')[0], 10)
+  return `${cur + 1}-${String((cur + 2) % 100).padStart(2, '0')}`
+}
+
+function BudgetsTab() {
+  const [canEdit, setCanEdit] = useState(false)
+  useEffect(() => {
+    setCanEdit(isAdmin() || isManager())
+  }, [])
+
+  const [fy, setFy] = useState(currentFY())
+  const [departments, setDepartments] = useState<string[]>([])
+  const [budgets, setBudgets] = useState<Budget[]>([])
+  const [loading, setLoading] = useState(true)
+  const [savingKey, setSavingKey] = useState<string | null>(null)
+
+  const [addOpen, setAddOpen] = useState(false)
+  const [addForm, setAddForm] = useState<{ department: string; quarter: string; amount: string }>({
+    department: '',
+    quarter: 'Q1',
+    amount: '',
+  })
+  const [addError, setAddError] = useState<string | null>(null)
+  const [addLoading, setAddLoading] = useState(false)
+
+  const handleAddBudget = async () => {
+    setAddLoading(true)
+    setAddError(null)
+    try {
+      const amt = parseFloat(addForm.amount)
+      if (!addForm.department || isNaN(amt) || amt <= 0) {
+        setAddError('Department and a positive amount are required')
+        setAddLoading(false)
+        return
+      }
+      await createBudget({
+        department: addForm.department,
+        fiscal_year: fy,
+        quarter: addForm.quarter,
+        amount: amt,
+      })
+      await refresh()
+      setAddOpen(false)
+      setAddForm({ department: '', quarter: 'Q1', amount: '' })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add budget'
+      if (msg.includes('409') || msg.toLowerCase().includes('already exists')) {
+        setAddError(`Budget already exists for ${addForm.department} ${addForm.quarter} — edit the cell directly.`)
+      } else {
+        setAddError(msg)
+      }
+    } finally {
+      setAddLoading(false)
+    }
+  }
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [m, b] = await Promise.all([
+        getMasterData('department'),
+        getBudgets({ fiscal_year: fy }),
+      ])
+      setDepartments(m.filter((x) => x.is_active !== false).map((x) => x.value))
+      setBudgets(b)
+    } finally {
+      setLoading(false)
+    }
+  }, [fy])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const lookup = (dept: string, q: string) =>
+    budgets.find((b) => b.department === dept && b.quarter === q)
+
+  const setAmount = async (dept: string, q: string, amount: number) => {
+    const key = `${dept}:${q}`
+    setSavingKey(key)
+    try {
+      const existing = lookup(dept, q)
+      if (existing) {
+        await updateBudget(existing.id, { amount })
+      } else {
+        await createBudget({ department: dept, fiscal_year: fy, quarter: q, amount })
+      }
+      await refresh()
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  const deleteCell = async (dept: string, q: string) => {
+    const existing = lookup(dept, q)
+    if (!existing) return
+    const key = `${dept}:${q}`
+    setSavingKey(key)
+    try {
+      await deleteBudget(existing.id)
+      await refresh()
+    } finally {
+      setSavingKey(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-on-surface-variant text-sm">
+          Set quarterly budgets per department. Empty cells mean no budget set; the budget rule skips departments without a budget for the period.
+        </p>
+        <div className="flex items-center gap-2">
+          <select
+            value={fy}
+            onChange={(e) => setFy(e.target.value)}
+            className="bg-surface-container-lowest text-on-surface px-3 py-2 rounded border border-outline-variant text-sm"
+          >
+            <option value={currentFY()}>FY {currentFY()}</option>
+            <option value={nextFY()}>FY {nextFY()}</option>
+          </select>
+          {canEdit && (
+            <button
+              onClick={() => { setAddForm({ department: '', quarter: 'Q1', amount: '' }); setAddError(null); setAddOpen(true) }}
+              className="bg-gradient-to-r from-primary to-primary-container rounded-full text-on-primary font-body font-medium py-2 px-5 text-sm transition-all duration-300 hover:opacity-90"
+            >
+              Add Budget
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!canEdit && (
+        <p className="text-on-surface-variant text-sm mb-4">
+          Read-only view — only admin and manager can edit budgets.
+        </p>
+      )}
+
+      <div className="bg-surface-container-low rounded-lg overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-white/5 text-on-surface-variant text-xs uppercase tracking-wider">
+              <th className="text-left px-6 py-3">Department</th>
+              {QUARTERS.map((q) => (
+                <th key={q} className="text-right px-4 py-3">{q}</th>
+              ))}
+              <th className="text-right px-6 py-3">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              Array.from({ length: 3 }).map((_, i) => <SkeletonRow key={i} cols={6} />)
+            ) : departments.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-6 py-8 text-center text-on-surface-variant text-sm">
+                  No active departments. Add some under Reference Data.
+                </td>
+              </tr>
+            ) : (
+              departments.map((dept) => {
+                const total = QUARTERS.reduce((sum, q) => sum + (lookup(dept, q)?.amount ?? 0), 0)
+                return (
+                  <tr key={dept} className="border-b border-white/5">
+                    <td className="px-6 py-3 text-on-surface font-medium">{dept}</td>
+                    {QUARTERS.map((q) => {
+                      const cur = lookup(dept, q)
+                      const key = `${dept}:${q}`
+                      return (
+                        <td key={q} className="px-4 py-2 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              key={`${dept}-${q}-${cur?.amount ?? 'empty'}`}
+                              type="number"
+                              defaultValue={cur?.amount ?? ''}
+                              placeholder="—"
+                              disabled={!canEdit || savingKey === key}
+                              onBlur={(e) => {
+                                const text = e.target.value.trim()
+                                if (text === '' && cur) {
+                                  deleteCell(dept, q)
+                                } else {
+                                  const v = parseFloat(text)
+                                  if (!isNaN(v) && v !== (cur?.amount ?? NaN)) setAmount(dept, q, v)
+                                }
+                              }}
+                              className="bg-surface-container-lowest text-on-surface text-right w-32 px-2 py-1 rounded border border-outline-variant focus:border-primary outline-none disabled:opacity-60"
+                            />
+                            {cur && canEdit && (
+                              <button
+                                onClick={() => deleteCell(dept, q)}
+                                disabled={savingKey === key}
+                                className="text-on-surface-variant opacity-40 hover:opacity-100 hover:text-error transition-opacity p-1"
+                                title="Delete this budget"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )
+                    })}
+                    <td className="px-6 py-3 text-right text-on-surface font-mono text-xs">
+                      {total > 0 ? `₹${total.toLocaleString('en-IN')}` : '—'}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+        <DialogContent className="bg-surface-container border-white/5">
+          <DialogHeader>
+            <DialogTitle className="text-on-surface text-lg font-semibold">
+              Add Budget — FY {fy}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="font-label text-xs uppercase tracking-[0.1em] text-on-surface-variant">Department</Label>
+              <Select value={addForm.department} onValueChange={(v) => setAddForm((f) => ({ ...f, department: v }))}>
+                <SelectTrigger className="bg-surface-container-lowest border-0 border-b-2 border-transparent focus:border-primary rounded-none text-on-surface">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-container border-white/10">
+                  {departments.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-label text-xs uppercase tracking-[0.1em] text-on-surface-variant">Quarter</Label>
+              <Select value={addForm.quarter} onValueChange={(v) => setAddForm((f) => ({ ...f, quarter: v }))}>
+                <SelectTrigger className="bg-surface-container-lowest border-0 border-b-2 border-transparent focus:border-primary rounded-none text-on-surface">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-container border-white/10">
+                  {QUARTERS.map((q) => (
+                    <SelectItem key={q} value={q}>{q}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="font-label text-xs uppercase tracking-[0.1em] text-on-surface-variant">Amount (₹)</Label>
+              <Input
+                type="number"
+                value={addForm.amount}
+                onChange={(e) => setAddForm((f) => ({ ...f, amount: e.target.value }))}
+                placeholder="e.g. 5000000"
+                className="bg-surface-container-lowest border-0 border-b-2 border-transparent focus:border-primary rounded-none text-on-surface placeholder:text-on-surface-variant/50"
+              />
+            </div>
+            {addError && <p className="text-error text-sm">{addError}</p>}
+          </div>
+          <DialogFooter>
+            <button
+              onClick={() => setAddOpen(false)}
+              className="border border-white/10 rounded-full px-5 py-2 text-sm font-body text-on-surface-variant hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAddBudget}
+              disabled={addLoading || !addForm.department || !addForm.amount}
+              className="bg-gradient-to-r from-primary to-primary-container rounded-full text-on-primary font-body font-medium px-5 py-2 text-sm disabled:opacity-40"
+            >
+              {addLoading ? 'Saving...' : 'Save'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 // ─── ConfigPage ───────────────────────────────────────────────────────────────
 
 export default function ConfigPage() {
@@ -945,6 +1240,12 @@ export default function ConfigPage() {
           >
             Reference Data
           </TabsTrigger>
+          <TabsTrigger
+            value="budgets"
+            className="data-[state=active]:bg-primary data-[state=active]:text-on-primary text-on-surface-variant px-6"
+          >
+            Budgets
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="rules">
@@ -953,6 +1254,10 @@ export default function ConfigPage() {
 
         <TabsContent value="reference">
           <ReferenceDataTab />
+        </TabsContent>
+
+        <TabsContent value="budgets">
+          <BudgetsTab />
         </TabsContent>
       </Tabs>
     </div>

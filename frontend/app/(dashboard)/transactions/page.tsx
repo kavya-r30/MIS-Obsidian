@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Download, ChevronDown, Plus } from 'lucide-react'
-import { getTransactions, deleteTransaction, exportExcel, exportPdf, createTransaction, getExceptions } from '@/lib/api'
+import { getTransactions, deleteTransaction, exportExcel, exportPdf, createTransaction, getExceptions, getMasterData } from '@/lib/api'
 import type { Transaction, ManualTransactionBody, ExceptionItem } from '@/lib/api'
 import { isAdmin, isManager } from '@/lib/auth'
 import SplitReviewPanel from '@/components/SplitReviewPanel'
@@ -17,6 +17,26 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
+
+const CATEGORY_PALETTE = [
+  'bg-primary/10 text-primary',
+  'bg-tertiary/10 text-tertiary',
+  'bg-secondary/10 text-secondary',
+  'bg-error/10 text-error',
+  'bg-primary-container/20 text-primary',
+  'bg-secondary-container/20 text-secondary',
+  'bg-tertiary-container/20 text-tertiary',
+] as const
+
+function categoryClass(category: string | null, allCategories: string[]): string {
+  if (!category) return 'bg-surface-container-high text-on-surface-variant'
+  const idx = allCategories.indexOf(category)
+  if (idx < 0) return 'bg-surface-container-high text-on-surface-variant'
+  return CATEGORY_PALETTE[idx % CATEGORY_PALETTE.length]
+}
 
 function ConfidenceBar({ score }: { score: number }) {
   const pct = Math.round(score)
@@ -61,6 +81,7 @@ export default function TransactionsPage() {
     department: '', tax_amount: undefined, approval_date: undefined,
     cost_center: undefined, payment_method: undefined,
     invoice_number: undefined, approval_ref: undefined,
+    expense_category: undefined,
   })
   const [addLoading, setAddLoading] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
@@ -74,12 +95,21 @@ export default function TransactionsPage() {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
+  const [allCategories, setAllCategories] = useState<string[]>([])
+  const [categoryFilter, setCategoryFilter] = useState<string | undefined>(undefined)
+
   const [adminUser, setAdminUser] = useState(false)
   const [canReview, setCanReview] = useState(false)
   const [activeTab, setActiveTab] = useState<'ledger' | 'review'>('ledger')
   const [reviewItems, setReviewItems] = useState<ExceptionItem[]>([])
   const [reviewLoading, setReviewLoading] = useState(false)
   useEffect(() => { setAdminUser(isAdmin()); setCanReview(isAdmin() || isManager()) }, [])
+
+  useEffect(() => {
+    getMasterData('expense_category').then((rows) => {
+      setAllCategories(rows.filter((r) => r.is_active !== false).map((r) => r.value))
+    })
+  }, [])
 
   const fetchData = (s = 0) => {
     setLoading(true)
@@ -89,6 +119,7 @@ export default function TransactionsPage() {
       department: deptFilter || undefined,
       start_date: startDate || undefined,
       end_date: endDate || undefined,
+      expense_category: categoryFilter,
       skip: s,
       limit: 50,
     })
@@ -103,7 +134,7 @@ export default function TransactionsPage() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setSkip(0); fetchData(0) }, [statusFilter, deptFilter, startDate, endDate])
+  useEffect(() => { setSkip(0); fetchData(0) }, [statusFilter, deptFilter, startDate, endDate, categoryFilter])
 
   useEffect(() => {
     if (activeTab === 'review') {
@@ -148,6 +179,7 @@ export default function TransactionsPage() {
         invoice_number: addForm.invoice_number?.trim() || undefined,
         approval_ref: addForm.approval_ref?.trim() || undefined,
         approval_date: addForm.approval_date || undefined,
+        expense_category: addForm.expense_category || undefined,
       })
       setItems((prev) => [created, ...prev])
       setTotal((t) => t + 1)
@@ -157,6 +189,7 @@ export default function TransactionsPage() {
         department: '', tax_amount: undefined, approval_date: undefined,
         cost_center: undefined, payment_method: undefined,
         invoice_number: undefined, approval_ref: undefined,
+        expense_category: undefined,
       })
     } catch (err: unknown) {
       setAddError(err instanceof Error ? err.message : 'Failed to create transaction')
@@ -185,7 +218,7 @@ export default function TransactionsPage() {
     finally { setPdfLoading(false) }
   }
 
-  const cols = adminUser ? 7 : 6
+  const cols = adminUser ? 8 : 7
 
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-10">
@@ -289,6 +322,25 @@ export default function TransactionsPage() {
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{fetchError}</div>
       )}
 
+      {/* Category filter pills */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button
+          onClick={() => setCategoryFilter(undefined)}
+          className={`px-3 py-1 rounded-full text-xs ${categoryFilter === undefined ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
+        >
+          All
+        </button>
+        {allCategories.map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={`px-3 py-1 rounded-full text-xs ${categoryFilter === cat ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
+          >
+            {cat.replace(/_/g, ' ')}
+          </button>
+        ))}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
         <input
@@ -332,7 +384,7 @@ export default function TransactionsPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-white/5">
-              {['Vendor', 'Amount', 'Date', 'Department', 'Status', 'Confidence', ...(adminUser ? ['Actions'] : [])].map((h) => (
+              {['Vendor', 'Amount', 'Date', 'Department', 'Category', 'Status', 'Confidence', ...(adminUser ? ['Actions'] : [])].map((h) => (
                 <th key={h} className="px-5 py-3 text-left text-[0.6875rem] font-medium uppercase tracking-[0.08em] text-on-surface-variant">{h}</th>
               ))}
             </tr>
@@ -365,6 +417,13 @@ export default function TransactionsPage() {
                 <td className="px-5 py-3 text-sm tabular-nums text-on-surface">{tx.amount != null ? `₹${tx.amount.toLocaleString()}` : '—'}</td>
                 <td className="px-5 py-3 text-sm text-on-surface-variant">{tx.transaction_date ?? '—'}</td>
                 <td className="px-5 py-3 text-sm text-on-surface-variant">{tx.department ?? '—'}</td>
+                <td className="px-4 py-3">
+                  {tx.expense_category && (
+                    <span className={`inline-block text-[0.65rem] font-medium px-2 py-0.5 rounded ${categoryClass(tx.expense_category, allCategories)}`}>
+                      {tx.expense_category.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </td>
                 <td className="px-5 py-3"><ValidationBadge status={tx.status} size="sm" /></td>
                 <td className="px-5 py-3"><ConfidenceBar score={tx.confidence_score ?? 0} /></td>
                 {adminUser && (
@@ -494,6 +553,26 @@ export default function TransactionsPage() {
                 onChange={(e) => setAddForm((f) => ({ ...f, cost_center: e.target.value || undefined }))}
                 placeholder="e.g. CC001"
                 className="bg-surface-container-lowest border-0 border-b-2 border-outline-variant focus:border-primary rounded-none text-on-surface placeholder:text-on-surface-variant/40" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="font-label text-xs uppercase tracking-[0.1em] text-on-surface-variant">
+                Expense Category (optional)
+              </Label>
+              <Select
+                value={addForm.expense_category ?? '__none__'}
+                onValueChange={(val) => setAddForm((f) => ({ ...f, expense_category: val === '__none__' ? undefined : val }))}
+              >
+                <SelectTrigger className="bg-surface-container-lowest border-0 border-b-2 border-transparent focus:border-primary rounded-none text-on-surface">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-surface-container border-white/10">
+                  <SelectItem value="__none__">None</SelectItem>
+                  {allCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat.replace(/_/g, ' ')}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-1.5">

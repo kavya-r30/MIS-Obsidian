@@ -148,6 +148,21 @@ def seed():
             MasterData(type=MasterDataType.department, value="HR", description="Human resources"),
             MasterData(type=MasterDataType.department, value="Operations", description="General operations"),
             MasterData(type=MasterDataType.department, value="Sales", description="Sales and business development"),
+            # Expense categories (editable by admin/manager via Master Data tab)
+            MasterData(type=MasterDataType.expense_category, value="travel", description="Flights, trains, taxis, mileage, lodging"),
+            MasterData(type=MasterDataType.expense_category, value="meals", description="Business meals, hospitality, catering"),
+            MasterData(type=MasterDataType.expense_category, value="office_supplies", description="Stationery, printer cartridges, pantry"),
+            MasterData(type=MasterDataType.expense_category, value="it_hardware", description="Laptops, peripherals, networking gear"),
+            MasterData(type=MasterDataType.expense_category, value="it_software", description="SaaS, licenses, cloud services"),
+            MasterData(type=MasterDataType.expense_category, value="professional_fees", description="Consultants, legal, audit, contractors"),
+            MasterData(type=MasterDataType.expense_category, value="utilities", description="Electricity, water, internet, telephone"),
+            MasterData(type=MasterDataType.expense_category, value="rent_lease", description="Office rent, equipment lease"),
+            MasterData(type=MasterDataType.expense_category, value="repairs_maintenance", description="Building and equipment maintenance"),
+            MasterData(type=MasterDataType.expense_category, value="training", description="Courses, conferences, certifications"),
+            MasterData(type=MasterDataType.expense_category, value="marketing", description="Ads, branding, events, PR"),
+            MasterData(type=MasterDataType.expense_category, value="capex", description="Capital expenditure, fixed assets"),
+            MasterData(type=MasterDataType.expense_category, value="taxes_duties", description="Statutory dues, customs, government fees"),
+            MasterData(type=MasterDataType.expense_category, value="other", description="Catch-all when no other category fits"),
         ]
         db.add_all(master)
 

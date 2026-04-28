@@ -1,7 +1,7 @@
 # backend/db/models.py
 import enum
 from datetime import datetime
-from sqlalchemy import String, Float, Boolean, DateTime, ForeignKey, Text, Enum as SAEnum, Integer
+from sqlalchemy import String, Float, Boolean, DateTime, ForeignKey, Text, Enum as SAEnum, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -30,6 +30,7 @@ class MasterDataType(str, enum.Enum):
     vendor = "vendor"
     cost_center = "cost_center"
     department = "department"
+    expense_category = "expense_category"
 
 
 class RuleType(str, enum.Enum):
@@ -82,6 +83,7 @@ class Transaction(Base):
     approval_ref:       Mapped[str|None]      = mapped_column(String)
     invoice_number:     Mapped[str|None]      = mapped_column(String, nullable=True)
     payment_method:     Mapped[str|None]      = mapped_column(String)
+    expense_category:   Mapped[str|None]      = mapped_column(String, nullable=True)
     confidence_score:   Mapped[float]         = mapped_column(Float, default=0.0)
     status:             Mapped[TransactionStatus] = mapped_column(SAEnum(TransactionStatus), default=TransactionStatus.pending)
     is_duplicate:       Mapped[bool]          = mapped_column(Boolean, default=False)
@@ -141,3 +143,15 @@ class AuditLog(Base):
     entity_id:   Mapped[int|None] = mapped_column(Integer, nullable=True)
     details:     Mapped[str|None] = mapped_column(Text, nullable=True)
     timestamp:   Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    id:          Mapped[int]           = mapped_column(Integer, primary_key=True)
+    department:  Mapped[str]           = mapped_column(String, nullable=False, index=True)
+    fiscal_year: Mapped[str]           = mapped_column(String, nullable=False)
+    quarter:     Mapped[str]           = mapped_column(String, nullable=False)
+    amount:      Mapped[float]         = mapped_column(Float, nullable=False)
+    created_at:  Mapped[datetime]      = mapped_column(DateTime, default=datetime.utcnow)
+    created_by:  Mapped[int|None]      = mapped_column(ForeignKey("users.id"), nullable=True)
+    __table_args__ = (UniqueConstraint("department", "fiscal_year", "quarter", name="uq_budget_dept_period"),)

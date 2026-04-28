@@ -6,10 +6,10 @@ import Link from 'next/link'
 import { Upload, AlertTriangle, Download, MessageSquare } from 'lucide-react'
 import {
   getAnalyticsSummary, getAnalyticsSpend, getAnalyticsTrends,
-  getTransactions, getAnalyticsDepartment,
+  getTransactions, getAnalyticsDepartment, getBudgetVariance,
 } from '@/lib/api'
 import type {
-  AnalyticsSummary, SpendAnalytics, TrendPoint, Transaction, DeptStat,
+  AnalyticsSummary, SpendAnalytics, TrendPoint, Transaction, DeptStat, BudgetVariance,
 } from '@/lib/api'
 import { isAdmin, isManager } from '@/lib/auth'
 import ValidationBadge from '@/components/ValidationBadge'
@@ -80,6 +80,105 @@ function DeptSpendBars({ depts, loading }: { depts: DeptStat[]; loading: boolean
   )
 }
 
+function BudgetVarianceCard() {
+  const [data, setData] = useState<BudgetVariance[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Compute current Indian fiscal period client-side
+  const now = new Date()
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const fy = `${fyStartYear}-${String((fyStartYear + 1) % 100).padStart(2, '0')}`
+  const monthNum = now.getMonth() + 1
+  const qNum = monthNum >= 4 ? Math.floor((monthNum - 4) / 3) + 1 : 4
+  const quarter = `Q${qNum}`
+
+  // Quarter date bounds (used for transaction drill-through)
+  const _Q_BOUNDS: Record<string, [string, string]> = {
+    Q1: [`${fyStartYear}-04-01`, `${fyStartYear}-06-30`],
+    Q2: [`${fyStartYear}-07-01`, `${fyStartYear}-09-30`],
+    Q3: [`${fyStartYear}-10-01`, `${fyStartYear}-12-31`],
+    Q4: [`${fyStartYear + 1}-01-01`, `${fyStartYear + 1}-03-31`],
+  }
+  const [startDate, endDate] = _Q_BOUNDS[quarter]
+  const periodLabel = `${quarter} FY ${fy}`
+
+  useEffect(() => {
+    getBudgetVariance({ fiscal_year: fy, quarter })
+      .then(setData)
+      .finally(() => setLoading(false))
+  }, [fy, quarter])
+
+  const Header = () => (
+    <div className="flex items-center justify-between mb-3">
+      <p className="text-xs uppercase tracking-wider text-on-surface-variant">Budget Variance</p>
+      <p className="text-xs text-on-surface-variant">{periodLabel}</p>
+    </div>
+  )
+
+  if (loading) {
+    return (
+      <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg p-4">
+        <Header />
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-8 animate-pulse bg-surface-container-high rounded" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (data.length === 0) {
+    return (
+      <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg p-4">
+        <Header />
+        <p className="text-sm text-on-surface-variant mb-3">
+          No budgets set for {periodLabel}.
+        </p>
+        <Link href="/config?tab=budgets" className="text-sm text-primary hover:underline">
+          Set up budgets →
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-surface-container-low border border-outline-variant/20 rounded-lg p-4">
+      <Header />
+      <div className="space-y-2">
+        {data.map((d) => {
+          const pct = Math.min(d.pct_used, 100)
+          const color =
+            d.status === 'over' ? 'bg-error' :
+            d.status === 'warning' ? 'bg-tertiary' :
+            'bg-primary'
+          const drillHref = `/transactions?department=${encodeURIComponent(d.department)}&start_date=${startDate}&end_date=${endDate}`
+          return (
+            <Link
+              key={d.department}
+              href={drillHref}
+              className="block hover:bg-surface-container rounded p-2 -mx-2 transition-colors"
+            >
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-on-surface font-medium">{d.department}</span>
+                <span className="text-on-surface-variant font-mono">
+                  ₹{d.spent.toLocaleString('en-IN')} / ₹{d.budgeted.toLocaleString('en-IN')}
+                  {d.status === 'over' && (
+                    <span className="text-error ml-1">+{(d.pct_used - 100).toFixed(0)}%</span>
+                  )}
+                </span>
+              </div>
+              <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
+                <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+              </div>
+            </Link>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function OverviewPage() {
   const { admin, manager } = useRole()
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null)
@@ -144,6 +243,10 @@ export default function OverviewPage() {
             <p className="text-[0.6875rem] text-on-surface-variant mt-3">Total spend: {fmt(spend.total_spend)}</p>
           )}
         </div>
+      </div>
+
+      <div className="mb-8">
+        <BudgetVarianceCard />
       </div>
 
       <div className="bg-surface-container-low border border-white/5 rounded-lg overflow-hidden">

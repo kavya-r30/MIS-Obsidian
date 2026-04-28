@@ -37,6 +37,7 @@ export interface Transaction {
   department: string | null
   cost_center: string | null
   payment_method: string | null
+  expense_category: string | null
   approval_ref: string | null
   invoice_number: string | null
   original_filename: string | null
@@ -76,6 +77,7 @@ export interface MasterDataEntry {
   data_type: string
   value: string
   description: string | null
+  is_active: boolean
   created_at: string | null
 }
 
@@ -186,6 +188,7 @@ export const getAnalyticsDepartment = () =>
 export const getTransactions = (params?: {
   status?: string
   department?: string
+  expense_category?: string
   start_date?: string
   end_date?: string
   skip?: number
@@ -218,6 +221,7 @@ export interface ManualTransactionBody {
   department: string
   cost_center?: string
   payment_method?: string
+  expense_category?: string
   invoice_number?: string
   approval_ref?: string
 }
@@ -337,3 +341,38 @@ export const getAuditLog = (params?: {
   limit?: number
 }): Promise<{ total: number; items: AuditLogEntry[] }> =>
   api.get<{ total: number; items: AuditLogEntry[] }>('/api/audit-log/', { params }).then((r) => r.data)
+
+export interface Budget {
+  id: number
+  department: string
+  fiscal_year: string
+  quarter: string
+  amount: number
+  created_at: string | null
+}
+
+export interface BudgetVariance {
+  department: string
+  fiscal_year: string
+  quarter: string
+  budgeted: number
+  spent: number
+  remaining: number
+  pct_used: number
+  status: 'under' | 'warning' | 'over'
+}
+
+export const getBudgets = (params?: { department?: string; fiscal_year?: string; quarter?: string }) =>
+  api.get<Budget[]>('/api/budgets/', { params }).then((r) => r.data)
+
+export const createBudget = (body: { department: string; fiscal_year: string; quarter: string; amount: number }) =>
+  api.post<Budget>('/api/budgets/', body).then((r) => r.data)
+
+export const updateBudget = (id: number, body: { amount: number }) =>
+  api.patch<Budget>(`/api/budgets/${id}`, body).then((r) => r.data)
+
+export const deleteBudget = (id: number): Promise<void> =>
+  api.delete(`/api/budgets/${id}`).then(() => undefined)
+
+export const getBudgetVariance = (params?: { fiscal_year?: string; quarter?: string }) =>
+  api.get<BudgetVariance[]>('/api/budgets/variance', { params }).then((r) => r.data)
