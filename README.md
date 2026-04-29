@@ -4,7 +4,7 @@
 
 Obsidian MIS is an AI-assisted financial transaction integrity management system built for institutional finance departments. It solves a fundamental operational problem: verifying that every expense claim, vendor invoice, and procurement receipt is authentic, policy-compliant, and correctly categorised — at scale, without placing the full burden on human reviewers.
 
-Most institutions today rely on manual spot-checks or basic spreadsheet rules that cannot keep up with transaction volume, are inconsistently applied, and leave no structured audit trail. Obsidian MIS replaces this with an automated pipeline: documents come in, get read by AI, get validated against a configurable rule set, and are either cleared automatically or routed to the right person for review.
+Most institutions today rely on manual spot-checks or basic spreadsheet rules that cannot keep up with transaction volume, are inconsistently applied, and leave no structured audit trail. Obsidian MIS replaces this with an automated pipeline: documents come in, get read by AI, get validated against a configurable rule set, and are either cleared automatically or routed to the right person for review. 
 
 ---
 
